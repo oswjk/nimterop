@@ -42,7 +42,7 @@ proc walkDirImpl(indir, inext: string, file=true): seq[string] =
     dir = joinPathIfRel(getProjectPath(), indir)
     ext =
       if inext.len != 0:
-        when not defined(Windows):
+        if hostOS != "windows":
           "-name " & inext
         else:
           "\\" & inext
@@ -51,7 +51,7 @@ proc walkDirImpl(indir, inext: string, file=true): seq[string] =
 
   let
     cmd =
-      when defined(Windows):
+      if hostOS == "windows":
         if file:
           "cmd /c dir /s/b/a-d " & dir.replace("/", "\\") & ext
         else:
@@ -70,13 +70,17 @@ proc walkDirImpl(indir, inext: string, file=true): seq[string] =
 proc getFileDate(fullpath: string): string =
   var
     ret = 0
-    cmd =
-      when defined(Windows):
-        &"cmd /c for %a in ({fullpath.quoteShell}) do echo %~ta"
-      elif defined(Linux):
-        &"stat -c %y {fullpath.quoteShell}"
-      elif defined(OSX):
-        &"stat -f %m {fullpath.quoteShell}"
+    cmd = ""
+
+  case hostOS
+  of "windows":
+    cmd = &"cmd /c for %a in ({fullpath.quoteShell}) do echo %~ta"
+  of "linux":
+    cmd = &"stat -c %y {fullpath.quoteShell}"
+  of "macosx":
+    cmd = &"stat -f %m {fullpath.quoteShell}"
+  else:
+    doAssert false
 
   (result, ret) = gorgeEx(cmd)
 
@@ -115,7 +119,7 @@ proc getNimCheckError(output: string): tuple[tmpFile, errors: string] =
 proc getToast(fullpath: string, recurse: bool = false): string =
   var
     ret = 0
-    cmd = when defined(Windows): "cmd /c " else: ""
+    cmd = if hostOS == "windows": "cmd /c " else: ""
 
   let toastExe = toastExePath()
   doAssert fileExists(toastExe), "toast not compiled: " & toastExe.quoteShell &
@@ -146,7 +150,7 @@ proc getToast(fullpath: string, recurse: bool = false): string =
 proc getGccPaths(mode = "c"): string =
   var
     ret = 0
-    nul = when defined(Windows): "nul" else: "/dev/null"
+    nul = if hostOS == "windows": "nul" else: "/dev/null"
     mmode = if mode == "cpp": "c++" else: mode
 
   (result, ret) = gorgeEx("gcc -Wp,-v -x" & mmode & " " & nul)
@@ -452,7 +456,7 @@ macro cCompile*(path: static string, mode = "c", exclude = ""): untyped =
       if mode.strVal().contains("cpp"):
         for i in @["*.cpp", "*.c++", "*.cc", "*.cxx"]:
           stmt &= dcompile(fpath, exclude.strVal(), i)
-        when not defined(Windows):
+        if hostOS != "windows":
           stmt &= dcompile(fpath, exclude.strVal(), "*.C")
       else:
         stmt &= dcompile(fpath, exclude.strVal(), "*.c")

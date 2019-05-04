@@ -6,7 +6,7 @@ proc execAction*(cmd: string, nostderr=false): string =
   var
     ccmd = ""
     ret = 0
-  when defined(Windows):
+  when hostOS == "windows":
     ccmd = "cmd /c " & cmd
   elif defined(posix):
     ccmd = cmd
@@ -23,7 +23,7 @@ proc execAction*(cmd: string, nostderr=false): string =
 proc mkDir*(dir: string) =
   if not dirExists(dir):
     let
-      flag = when not defined(Windows): "-p" else: ""
+      flag = if hostOS != "windows": "-p" else: ""
     discard execAction(&"mkdir {flag} {dir.quoteShell}")
 
 proc cpFile*(source, dest: string, move=false) =
@@ -31,7 +31,7 @@ proc cpFile*(source, dest: string, move=false) =
     source = source.replace("/", $DirSep)
     dest = dest.replace("/", $DirSep)
     cmd =
-      when defined(Windows):
+      if hostOS == "windows":
         if move:
           "move /y"
         else:
@@ -49,7 +49,7 @@ proc mvFile*(source, dest: string) =
 
 proc extractZip*(zipfile, outdir: string) =
   var cmd = "unzip -o $#"
-  if defined(Windows):
+  if hostOS == "windows":
     cmd = "powershell -nologo -noprofile -command \"& { Add-Type -A " &
           "'System.IO.Compression.FileSystem'; " &
           "[IO.Compression.ZipFile]::ExtractToDirectory('$#', '.'); }\""
@@ -65,7 +65,7 @@ proc downloadUrl*(url, outdir: string) =
   if not (ext == ".zip" and fileExists(outdir/file)):
     echo "Downloading " & file
     mkDir(outdir)
-    var cmd = if defined(Windows):
+    var cmd = if hostOS == "windows":
       "powershell [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; wget $# -OutFile $#"
     else:
       "curl $# -o $#"
