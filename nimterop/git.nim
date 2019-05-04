@@ -2,11 +2,14 @@ import macros, os, osproc, regex, strformat, strutils
 
 import "."/[paths, compat]
 
+when not defined(buildOS):
+  const buildOS* {.magic: "BuildOS".} = ""
+
 proc execAction*(cmd: string, nostderr=false): string =
   var
     ccmd = ""
     ret = 0
-  when hostOS == "windows":
+  when buildOS == "windows":
     ccmd = "cmd /c " & cmd
   elif defined(posix):
     ccmd = cmd
@@ -23,7 +26,7 @@ proc execAction*(cmd: string, nostderr=false): string =
 proc mkDir*(dir: string) =
   if not dirExists(dir):
     let
-      flag = if hostOS != "windows": "-p" else: ""
+      flag = if buildOS != "windows": "-p" else: ""
     discard execAction(&"mkdir {flag} {dir.quoteShell}")
 
 proc cpFile*(source, dest: string, move=false) =
@@ -31,7 +34,7 @@ proc cpFile*(source, dest: string, move=false) =
     source = source.replace("/", $DirSep)
     dest = dest.replace("/", $DirSep)
     cmd =
-      if hostOS == "windows":
+      if buildOS == "windows":
         if move:
           "move /y"
         else:
@@ -49,7 +52,7 @@ proc mvFile*(source, dest: string) =
 
 proc extractZip*(zipfile, outdir: string) =
   var cmd = "unzip -o $#"
-  if hostOS == "windows":
+  if buildOS == "windows":
     cmd = "powershell -nologo -noprofile -command \"& { Add-Type -A " &
           "'System.IO.Compression.FileSystem'; " &
           "[IO.Compression.ZipFile]::ExtractToDirectory('$#', '.'); }\""
@@ -65,7 +68,7 @@ proc downloadUrl*(url, outdir: string) =
   if not (ext == ".zip" and fileExists(outdir/file)):
     echo "Downloading " & file
     mkDir(outdir)
-    var cmd = if hostOS == "windows":
+    var cmd = if buildOS == "windows":
       "powershell [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; wget $# -OutFile $#"
     else:
       "curl $# -o $#"

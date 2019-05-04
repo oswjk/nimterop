@@ -42,7 +42,7 @@ proc walkDirImpl(indir, inext: string, file=true): seq[string] =
     dir = joinPathIfRel(getProjectPath(), indir)
     ext =
       if inext.len != 0:
-        if hostOS != "windows":
+        if buildOS != "windows":
           "-name " & inext
         else:
           "\\" & inext
@@ -51,7 +51,7 @@ proc walkDirImpl(indir, inext: string, file=true): seq[string] =
 
   let
     cmd =
-      if hostOS == "windows":
+      if buildOS == "windows":
         if file:
           "cmd /c dir /s/b/a-d " & dir.replace("/", "\\") & ext
         else:
@@ -72,7 +72,7 @@ proc getFileDate(fullpath: string): string =
     ret = 0
     cmd = ""
 
-  case hostOS
+  case buildOS
   of "windows":
     cmd = &"cmd /c for %a in ({fullpath.quoteShell}) do echo %~ta"
   of "linux":
@@ -119,7 +119,7 @@ proc getNimCheckError(output: string): tuple[tmpFile, errors: string] =
 proc getToast(fullpath: string, recurse: bool = false): string =
   var
     ret = 0
-    cmd = if hostOS == "windows": "cmd /c " else: ""
+    cmd = if buildOS == "windows": "cmd /c " else: ""
 
   let toastExe = toastExePath()
   doAssert fileExists(toastExe), "toast not compiled: " & toastExe.quoteShell &
@@ -150,7 +150,7 @@ proc getToast(fullpath: string, recurse: bool = false): string =
 proc getGccPaths(mode = "c"): string =
   var
     ret = 0
-    nul = if hostOS == "windows": "nul" else: "/dev/null"
+    nul = if buildOS == "windows": "nul" else: "/dev/null"
     mmode = if mode == "cpp": "c++" else: mode
 
   (result, ret) = gorgeEx("gcc -Wp,-v -x" & mmode & " " & nul)
@@ -456,7 +456,7 @@ macro cCompile*(path: static string, mode = "c", exclude = ""): untyped =
       if mode.strVal().contains("cpp"):
         for i in @["*.cpp", "*.c++", "*.cc", "*.cxx"]:
           stmt &= dcompile(fpath, exclude.strVal(), i)
-        if hostOS != "windows":
+        if buildOS != "windows":
           stmt &= dcompile(fpath, exclude.strVal(), "*.C")
       else:
         stmt &= dcompile(fpath, exclude.strVal(), "*.c")
