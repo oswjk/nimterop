@@ -264,8 +264,10 @@ proc findFile*(file: string, dir: string, recurse = true, first = false, regex =
     cmd =
       when defined(windows):
         "nimgrep --filenames --oneline --nocolor $1 $2 $3"
-      else:
+      elif defined(linux):
         "find $3 $1 -regextype egrep -regex $2"
+      elif defined(osx):
+        "find -E $3 $1 -regex $2"
 
     recursive = ""
 
