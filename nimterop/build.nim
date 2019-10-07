@@ -263,7 +263,7 @@ proc findFile*(file: string, dir: string, recurse = true, first = false, regex =
   var
     cmd =
       when defined(windows):
-        "nimgrep --filenames --oneline --nocolor $1 $2 $3"
+        "nimgrep --filenames --nocolor $1 $2 $3"
       elif defined(linux):
         "find $3 $1 -regextype egrep -regex $2"
       elif defined(osx):
@@ -283,7 +283,7 @@ proc findFile*(file: string, dir: string, recurse = true, first = false, regex =
       dir = dir / file.parentDir()
       file = file.extractFilename
 
-  cmd = cmd % [recursive, (".*[\\/]" & file & "$").quoteShell, dir.sanitizePath]
+  cmd = cmd % [recursive, (".*[\\\\/]" & file & "$").quoteShell, dir.sanitizePath]
 
   let
     (files, ret) = gorgeEx(cmd)
@@ -291,14 +291,14 @@ proc findFile*(file: string, dir: string, recurse = true, first = false, regex =
     for line in files.splitLines():
       let f =
         when defined(windows):
-          if ":" in line:
-            line.split(":", maxsplit = 1)[0]
+          if line.len != 0 and line[0] != ' ' and line[^7 .. ^1] != "matches":
+            line
           else:
             ""
         else:
           line
 
-      if (f.len != 0 and result.len == 0 or result.len > f.len):
+      if (f.len != 0 and (result.len == 0 or result.len > f.len)):
         result = f
         if first: break
 
