@@ -263,7 +263,7 @@ proc findFile*(file: string, dir: string, recurse = true, first = false, regex =
   var
     cmd =
       when defined(windows):
-        "nimgrep --filenames --nocolor $1 $2 $3"
+        "nimgrep --filenames --oneline --nocolor $1 $2 $3"
       elif defined(linux):
         "find $3 $1 -regextype egrep -regex $2"
       elif defined(osx):
@@ -291,8 +291,8 @@ proc findFile*(file: string, dir: string, recurse = true, first = false, regex =
     for line in files.splitLines():
       let f =
         when defined(windows):
-          if line.len != 0 and line[0] != ' ' and line[^7 .. ^1] != "matches":
-            line
+          if ": " in line:
+            line.split(": ", maxsplit = 1)[1]
           else:
             ""
         else:
