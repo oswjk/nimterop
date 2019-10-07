@@ -1,4 +1,4 @@
-import macros, regex, strformat
+import macros, strformat
 
 when (NimMajor, NimMinor, NimPatch) >= (0, 19, 9):
   from os import parentDir, getCurrentCompilerExe, DirSep
@@ -59,7 +59,7 @@ proc buildDocs*(files: openArray[string], path: string, baseDir = getProjectPath
           getCurrentDir() & $DirSep
         else:
           baseDir
-      path = baseDir & path.replace(re"[/\\]", $DirSep)
+      path = baseDir & path
       defStr = block:
         var defStr = ""
         for def in defines:
