@@ -278,9 +278,16 @@ proc findFile*(file: string, dir: string, recurse = true, first = false, regex =
     when not defined(windows):
       recursive = "-maxdepth 1"
 
-  let
-    dir = if not regex: dir / file.parentDir() else: dir
-    file = if not regex: file.extractFilename else: file
+  var
+    dir = dir
+    file = file
+  if not recurse:
+    let
+      pdir = file.parentDir()
+    if pdir.len != 0:
+      dir = dir / pdir
+
+    file = file.extractFilename
 
   cmd = cmd % [recursive, (".*[\\\\/]" & file & "$").quoteShell, dir.sanitizePath]
 
