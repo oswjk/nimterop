@@ -2,6 +2,8 @@ import dynlib, macros, os, sequtils, sets, strformat, strutils, tables, times
 
 import regex
 
+import compiler/[ast, idents, lineinfos, msgs, pathutils]
+
 import "."/[build, compat, globals, plugin, treesitter/api]
 
 const gReserved = """
@@ -25,6 +27,8 @@ var
 when while
 xor
 yield""".split(Whitespace).toSet()
+
+# Types related
 
 const gTypeMap* = {
   # char
@@ -90,6 +94,21 @@ proc getType*(str: string): string =
 
   if gTypeMap.hasKey(result):
     result = gTypeMap[result]
+
+proc getPtrType*(str: string): string =
+  result = case str:
+    of "ptr cchar":
+      "cstring"
+    of "ptr ptr cchar":
+      "ptr cstring"
+    of "ptr object":
+      "pointer"
+    of "ptr ptr object":
+      "ptr pointer"
+    else:
+      str
+
+# Identifier related
 
 proc checkIdentifier(name, kind, parent, origName: string) =
   let
@@ -165,6 +184,8 @@ proc addNewIdentifer*(nimState: NimState, name: string, override = false): bool 
       nimState.identifiers[nimName] = name
       result = true
 
+# Overrides related
+
 proc getOverride*(nimState: NimState, name: string, kind: NimSymKind): string =
   doAssert name.nBl, "Blank identifier error"
 
@@ -189,34 +210,96 @@ proc getOverrideFinal*(nimState: NimState, kind: NimSymKind): string =
     for i in nimState.gState.onSymbolOverrideFinal(typ):
       result &= "\n" & nimState.getOverride(i, kind)
 
-proc getPtrType*(str: string): string =
-  result = case str:
-    of "ptr cchar":
-      "cstring"
-    of "ptr ptr cchar":
-      "ptr cstring"
-    of "ptr object":
-      "pointer"
-    of "ptr ptr object":
-      "ptr pointer"
-    else:
-      str
-
-proc getLit*(str: string): string =
+proc getLit*(str: string): PNode =
   # Used to convert #define literals into const
   let
     str = str.replace(re"/[/*].*?(?:\*/)?$", "").strip()
 
-  if str.contains(re"^[\-]?[\d]*[.]?[\d]+$") or # decimal
-    str.contains(re"^0x[\da-fA-F]+$") or        # hexadecimal
-    str.contains(re"^'[[:ascii:]]'$") or        # char
-    str.contains(re"""^"[[:ascii:]]+"$"""):     # char *
-    return str
+  if str.contains(re"^[\-]?[\d]+$"):              # decimal
+    result = newIntNode(nkIntLit, parseInt(str))
+
+  elif str.contains(re"^[\-]?[\d]*[.]?[\d]+$"):   # float
+    result = newFloatNode(nkFloatLit, parseFloat(str))
+
+  elif str.contains(re"^0x[\da-fA-F]+$"):         # hexadecimal
+    result = newIntNode(nkIntLit, parseHexInt(str))
+
+  elif str.contains(re"^'[[:ascii:]]'$"):         # char
+    result = newNode(nkCharLit)
+    result.intVal = str[1].int64
+
+  elif str.contains(re"""^"[[:ascii:]]+"$"""):    # char *
+    result = newStrNode(nkStrLit, str[1 .. ^2])
+
+  else:
+    result = newNode(nkNilLit)
+
+# TSNode shortcuts
+
+proc len*(node: TSNode): uint =
+  if not node.tsNodeIsNull:
+    result = node.tsNodeNamedChildCount().uint
+
+proc `[]`*(node: TSNode, i: BiggestUInt): TSNode =
+  if i < node.len():
+    result = node.tsNodeNamedChild(i.uint32)
+
+proc getName*(node: TSNode): string {.inline.} =
+  if not node.tsNodeIsNull:
+    return $node.tsNodeType()
 
 proc getNodeVal*(nimState: NimState, node: TSNode): string =
-  return nimState.gState.code[node.tsNodeStartByte() .. node.tsNodeEndByte()-1].strip()
+  if not node.tsNodeIsNull:
+    return nimState.gState.code[node.tsNodeStartByte() .. node.tsNodeEndByte()-1].strip()
+
+proc getAtom*(node: TSNode): TSNode =
+  if not node.tsNodeIsNull:
+    # Get child node which is topmost atom
+    if node.getName() in gAtoms:
+      return node
+    elif node.len() != 0:
+      return node[0].getAtom()
+
+proc getPtrCount*(node: TSNode): string =
+  if not node.tsNodeIsNull:
+    # Get number of ptr nodes in tree
+    var
+      cnode = node
+    while "pointer_declarator" in cnode.getName():
+      result &= "ptr "
+      if cnode.len() != 0:
+        cnode = cnode[0]
+      else:
+        break
+
+proc getDeclarator*(node: TSNode): TSNode =
+  if not node.tsNodeIsNull:
+    # Return if child is a function or array declarator
+    if node.getName() in ["function_declarator", "array_declarator"]:
+      return node
+    elif node.len() != 0:
+      return node[0].getDeclarator()
+
+proc inTree*(node: TSNode, ntype: string): bool =
+  # Search for node type in tree - first children
+  result = false
+  var
+    cnode = node
+  while not cnode.tsNodeIsNull:
+    if cnode.getName() == ntype:
+      return true
+    cnode = cnode[0]
+
+proc inChildren*(node: TSNode, ntype: string): bool =
+  # Search for node type in immediate children
+  result = false
+  for i in 0 ..< node.len():
+    if (node[i]).getName() == ntype:
+      result = true
+      break
 
 proc getLineCol*(gState: State, node: TSNode): tuple[line, col: int] =
+  # Get line number and column info for node
   result.line = 1
   result.col = 1
   for i in 0 .. node.tsNodeStartByte().int-1:
@@ -224,6 +307,54 @@ proc getLineCol*(gState: State, node: TSNode): tuple[line, col: int] =
       result.col = 0
       result.line += 1
     result.col += 1
+
+proc getTSNodeNamedChildCountSansComments*(node: TSNode): int =
+  for i in 0 ..< node.len():
+    if node.getName() != "comment":
+      result += 1
+
+proc getPxName*(node: TSNode, offset: int): string =
+  # Get the xth (grand)parent of the node
+  var
+    np = node
+    count = 0
+
+  while not np.tsNodeIsNull() and count < offset:
+    np = np.tsNodeParent()
+    count += 1
+
+  if count == offset and not np.tsNodeIsNull():
+    return np.getName()
+
+# Compiler shortcuts
+
+proc getLineInfo*(nimState: NimState, node: TSNode): TLineInfo =
+  # Get Nim equivalent line:col info from node
+  let
+    (line, col) = nimState.gState.getLineCol(node)
+
+  result = newLineInfo(nimState.config, nimState.sourceFile.AbsoluteFile, line, col)
+
+proc getIdent*(nimState: NimState, name: string, info: TLineInfo, exported = true): PNode =
+  # Get ident PNode for name + info
+  let
+    exp = getIdent(nimState.identCache, "*")
+    ident = getIdent(nimState.identCache, name)
+
+  if exported:
+    result = newNode(nkPostfix)
+    result.add newIdentNode(exp, info)
+    result.add newIdentNode(ident, info)
+  else:
+    result = newIdentNode(ident, info)
+
+proc getNameInfo*(nimState: NimState, node: TSNode, kind: NimSymKind, parent = ""):
+  tuple[name: string, info: TLineInfo] =
+  # Shortcut to get identifier name and info (node value and line:col)
+  let
+    name = nimState.getNodeVal(node)
+  result.name = nimState.getIdentifier(name, kind, parent)
+  result.info = nimState.getLineInfo(node)
 
 proc getCurrentHeader*(fullpath: string): string =
   ("header" & fullpath.splitFile().name.multiReplace([(".", ""), ("-", "")]))
@@ -291,91 +422,6 @@ proc getPreprocessor*(gState: State, fullpath: string, mode = "cpp"): string =
     replace(re"__attribute__[ ]*\(\(.*?\)\)([ ,;])", "$1").
     removeStatic()
 
-converter toString*(kind: Kind): string =
-  return case kind:
-    of exactlyOne:
-      ""
-    of oneOrMore:
-      "+"
-    of zeroOrMore:
-      "*"
-    of zeroOrOne:
-      "?"
-    of orWithNext:
-      "!"
-
-converter toKind*(kind: string): Kind =
-  return case kind:
-    of "+":
-      oneOrMore
-    of "*":
-      zeroOrMore
-    of "?":
-      zeroOrOne
-    of "!":
-      orWithNext
-    else:
-      exactlyOne
-
-proc getNameKind*(name: string): tuple[name: string, kind: Kind, recursive: bool] =
-  if name[0] == '^':
-    result.recursive = true
-    result.name = name[1 .. ^1]
-  else:
-    result.name = name
-  result.kind = $name[^1]
-
-  if result.kind != exactlyOne:
-    result.name = result.name[0 .. ^2]
-
-proc getTSNodeNamedChildCountSansComments*(node: TSNode): int =
-  if node.tsNodeNamedChildCount() != 0:
-    for i in 0 .. node.tsNodeNamedChildCount()-1:
-      if $node.tsNodeType() != "comment":
-        result += 1
-
-proc getTSNodeNamedChildNames*(node: TSNode): seq[string] =
-  if node.tsNodeNamedChildCount() != 0:
-    for i in 0 .. node.tsNodeNamedChildCount()-1:
-      let
-        name = $node.tsNodeNamedChild(i).tsNodeType()
-
-      if name != "comment":
-        result.add(name)
-
-proc getRegexForAstChildren*(ast: ref Ast): string =
-  result = "^"
-  for i in 0 .. ast.children.len-1:
-    let
-      kind: string = ast.children[i].kind
-      begin = if result[^1] == '|': "" else: "(?:"
-    case kind:
-      of "!":
-        result &= &"{begin}{ast.children[i].name}|"
-      else:
-        result &= &"{begin}{ast.children[i].name}){kind}"
-  result &= "$"
-
-proc getAstChildByName*(ast: ref Ast, name: string): ref Ast =
-  for i in 0 .. ast.children.len-1:
-    if name in ast.children[i].name.split("|"):
-      return ast.children[i]
-
-  if ast.children.len == 1 and ast.children[0].name == ".":
-    return ast.children[0]
-
-proc getPxName*(node: TSNode, offset: int): string =
-  var
-    np = node
-    count = 0
-
-  while not np.tsNodeIsNull() and count < offset:
-    np = np.tsNodeParent()
-    count += 1
-
-  if count == offset and not np.tsNodeIsNull():
-    return $np.tsNodeType()
-
 proc getNimExpression*(nimState: NimState, expr: string): string =
   var
     clean = expr.multiReplace([("\n", " "), ("\r", "")])
@@ -434,42 +480,6 @@ proc getNimExpression*(nimState: NimState, expr: string): string =
 proc getSplitComma*(joined: seq[string]): seq[string] =
   for i in joined:
     result = result.concat(i.split(","))
-
-proc getHeader*(nimState: NimState): string =
-  result =
-    if nimState.gState.dynlib.Bl:
-      &", header: {nimState.currentHeader}"
-    else:
-      ""
-
-proc getDynlib*(nimState: NimState): string =
-  result =
-    if nimState.gState.dynlib.nBl:
-      &", dynlib: {nimState.gState.dynlib}"
-    else:
-      ""
-
-proc getImportC*(nimState: NimState, origName, nimName: string): string =
-  if nimName != origName:
-    result = &"importc: \"{origName}\"{nimState.getHeader()}"
-  else:
-    result = nimState.impShort
-
-proc getPragma*(nimState: NimState, pragmas: varargs[string]): string =
-  result = ""
-  for pragma in pragmas.items():
-    if pragma.nBl:
-      result &= pragma & ", "
-  if result.nBl:
-    result = " {." & result[0 .. ^3] & ".}"
-
-  result = result.replace(nimState.impShort & ", cdecl", nimState.impShort & "C")
-
-  let
-    dy = nimState.getDynlib()
-
-  if ", cdecl" in result and dy.nBl:
-    result = result.replace(".}", dy & ".}")
 
 proc getComments*(nimState: NimState, strip = false): string =
   if not nimState.gState.nocomments and nimState.commentStr.nBl:

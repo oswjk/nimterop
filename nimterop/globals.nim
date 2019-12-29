@@ -1,6 +1,6 @@
 import sequtils, sets, tables
 
-import regex
+import compiler/[ast, idents, options]
 
 import "."/plugin
 
@@ -34,24 +34,6 @@ const
   ].concat(toSeq(gExpressions.items))
 
 type
-  Kind = enum
-    exactlyOne
-    oneOrMore     # +
-    zeroOrMore    # *
-    zeroOrOne     # ?
-    orWithNext    # !
-
-  Ast = object
-    name*: string
-    kind*: Kind
-    recursive*: bool
-    children*: seq[ref Ast]
-    when not declared(CIMPORT):
-      tonim*: proc (ast: ref Ast, node: TSNode, nimState: NimState)
-    regex*: Regex
-
-  AstTable {.used.} = TableRef[string, seq[ref Ast]]
-
   State = ref object
     compile*, defines*, headers*, includeDirs*, searchDirs*, prefix*, suffix*, symOverride*: seq[string]
 
@@ -65,7 +47,12 @@ type
   NimState {.used.} = ref object
     identifiers*: TableRef[string, string]
 
-    commentStr*, constStr*, debugStr*, enumStr*, procStr*, skipStr*, typeStr*: string
+    commentStr*, debugStr*, skipStr*: string
+
+    # Nim compiler objects
+    constSection*, enumSection*, procSection*, typeSection*: PNode
+    identCache*: IdentCache
+    config*: ConfigRef
 
     gState*: State
 
@@ -92,5 +79,5 @@ type CompileMode = enum
 const modeDefault {.used.} = $cpp # TODO: USE this everywhere relevant
 
 when not declared(CIMPORT):
-  export gAtoms, gExpressions, gEnumVals, Kind, Ast, AstTable, State, NimState,
+  export gAtoms, gExpressions, gEnumVals, State, NimState,
     nBl, Bl, CompileMode, modeDefault
