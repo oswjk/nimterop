@@ -2,7 +2,7 @@ import os, osproc, strformat, strutils, times
 
 import "."/treesitter/[api, c, cpp]
 
-import "."/[ast, compat, globals, getters, grammar]
+import "."/[ast2, compat, globals, getters]
 
 proc printLisp(gState: State, root: TSNode) =
   var
@@ -53,7 +53,7 @@ proc printLisp(gState: State, root: TSNode) =
     if node == root:
       break
 
-proc process(gState: State, path: string, astTable: AstTable) =
+proc process(gState: State, path: string) =
   doAssert existsFile(path), &"Invalid path {path}"
 
   var
@@ -93,7 +93,7 @@ proc process(gState: State, path: string, astTable: AstTable) =
   if gState.past:
     gState.printLisp(root)
   elif gState.pnim:
-    gState.printNim(path, root, astTable)
+    gState.printNim(path, root)
   elif gState.preprocess:
     gecho gState.code
 
@@ -109,7 +109,6 @@ proc main(
     nocomments = false,
     output = "",
     past = false,
-    pgrammar = false,
     pluginSourcePath: string = "",
     pnim = false,
     prefix: seq[string] = @[],
@@ -167,19 +166,12 @@ proc main(
     doAssert gState.outputHandle.open(outputFile, fmWrite),
       &"Failed to write to {outputFile}"
 
-  # Process grammar into AST
-  let
-    astTable = parseGrammar()
-
-  if pgrammar:
-    # Print AST of grammar
-    gState.printGrammar(astTable)
-  elif source.nBl:
+  if source.nBl:
     # Print source after preprocess or Nim output
     if gState.pnim:
       gState.printNimHeader()
     for src in source:
-      gState.process(src.expandSymlinkAbs(), astTable)
+      gState.process(src.expandSymlinkAbs())
 
   # Close outputFile
   if outputFile.len != 0:
@@ -241,7 +233,6 @@ when isMainModule:
     "nocomments": "exclude top-level comments from output",
     "output": "file to output content - default stdout",
     "past": "print AST output",
-    "pgrammar": "print grammar",
     "pluginSourcePath": "Nim file to build and load as a plugin",
     "pnim": "print Nim output",
     "preprocess": "run preprocessor on header",
@@ -260,7 +251,6 @@ when isMainModule:
     "nocomments": 'c',
     "output": 'o',
     "past": 'a',
-    "pgrammar": 'g',
     "pnim": 'n',
     "prefix": 'E',
     "preprocess": 'p',
