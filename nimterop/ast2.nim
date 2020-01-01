@@ -1,34 +1,97 @@
 import macros, os, strutils, tables, times
 
-import compiler/[ast, idents, options, renderer]
+import compiler/[ast, astalgo, idents, options, renderer]
 
 import "."/treesitter/api
 
 import "."/[compat, globals, getters]
 
 proc addConst(nimState: NimState, node: TSNode) =
-  echo "Const: " & nimState.getNodeVal(node)
-  if node.len() >= 2:
+  # (preproc_def
+  #  (identifier)
+  #  (preproc_arg)
+  # )
+  nimState.printDebug(node)
+
+  if node[0].getName() == "identifier" and
+    node[1].getName() == "preproc_arg":
     let
       constDef = newNode(nkConstDef)
+
+      # node[0] = identifier = const name
       (name, info) = nimState.getNameInfo(node.getAtom(), nskConst)
+      # TODO - check blank and override
       ident = nimState.getIdent(name, info)
+
+      # node[1] = preproc_arg = value
       val = nimState.getNodeVal(node[1]).getLit()
+
+    # If supported literal
     if val.kind != nkNilLit:
+      # nnkConstDef(
+      #   nnkPostfix(
+      #     nnkIdent("*"),
+      #     nnkIdent(name)
+      #   ),
+      #   nnkEmpty(),
+      #   nnkXLit(val)
+      # )
       constDef.add ident
       constDef.add newNode(nkEmpty)
       constDef.add val
 
+      # nnkConstSection.add
       nimState.constSection.add constDef
 
+      nimState.printDebug(constDef)
+
 proc addType(nimState: NimState, node: TSNode) =
-  echo "Type: " & nimState.getNodeVal(node)
+  # CASE1:
+  #
+  # typedef struct X Y;
+  #
+  # (type_definition
+  #  (struct_specifier
+  #   (type_identifier)
+  #  )
+  #  (type_identifier)
+  # )
+  #
+  # CASE 2
+  #
+  # typedef struct X *Y;
+  #
+  # (type_definition
+  #  (struct_specifier
+  #   (type_identifier)
+  #  )
+  #  (pointer_declarator
+  #   (type_identifier)
+  #  )
+  # )
+  #
+  nimState.printDebug(node)
+
+  let
+    typeDef = newNode(nkTypeDef)
+
+    fdlist = node.inTree("field_declaration_list")
+
+    identNode = if fdlist: node[1] else: node
+
+    (name, info) = nimState.getNameInfo(identNode.getAtom(), nskType)
+    # TODO - check blank and override
+    ident = nimState.getIdent(name, info)
+
+    typeNode =
+      if fdlist: node[0] else: node[1]
+
 
 proc addEnum(nimState: NimState, node: TSNode) =
-  echo "Enum: " & nimState.getNodeVal(node)
+  nimState.printDebug(node)
 
 proc addProc(nimState: NimState, node: TSNode) =
-  echo "Proc: " & nimState.getNodeVal(node)
+  nimState.printDebug(node)
 
 proc processNode(nimState: NimState, node: TSNode): bool =
   result = true

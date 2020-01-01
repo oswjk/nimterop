@@ -10,3 +10,6 @@ when defined(Windows):
 
 # Retain stackTrace for clear errors
 switch("stackTrace", "on")
+
+# Path to compiler
+switch("path", "$nim")
