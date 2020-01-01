@@ -2,7 +2,7 @@ import dynlib, macros, os, sequtils, sets, strformat, strutils, tables, times
 
 import regex
 
-import compiler/[ast, idents, lineinfos, msgs, pathutils]
+import compiler/[ast, idents, lineinfos, msgs, pathutils, renderer]
 
 import "."/[build, compat, globals, plugin, treesitter/api]
 
@@ -221,6 +221,7 @@ proc getLit*(str: string): PNode =
   elif str.contains(re"^[\-]?[\d]*[.]?[\d]+$"):   # float
     result = newFloatNode(nkFloatLit, parseFloat(str))
 
+  # TODO - hex becomes int on render
   elif str.contains(re"^0x[\da-fA-F]+$"):         # hexadecimal
     result = newIntNode(nkIntLit, parseHexInt(str))
 
@@ -325,6 +326,96 @@ proc getPxName*(node: TSNode, offset: int): string =
 
   if count == offset and not np.tsNodeIsNull():
     return np.getName()
+
+proc printLisp*(gState: State, root: TSNode): string =
+  var
+    node = root
+    nextnode: TSNode
+    depth = 0
+
+  while true:
+    if not node.tsNodeIsNull() and depth > -1:
+      if gState.pretty:
+        result &= spaces(depth)
+      let
+        (line, col) = gState.getLineCol(node)
+      result &= &"({$node.tsNodeType()} {line} {col} {node.tsNodeEndByte() - node.tsNodeStartByte()}"
+    else:
+      break
+
+    if node.tsNodeNamedChildCount() != 0:
+      if gState.pretty:
+        result &= "\n"
+      nextnode = node.tsNodeNamedChild(0)
+      depth += 1
+    else:
+      if gState.pretty:
+        result &= ")\n"
+      else:
+        result &= ")"
+      nextnode = node.tsNodeNextNamedSibling()
+
+    if nextnode.tsNodeIsNull():
+      while true:
+        node = node.tsNodeParent()
+        depth -= 1
+        if depth == -1:
+          break
+        if gState.pretty:
+          result &= spaces(depth) & ")\n"
+        else:
+          result &= ")"
+        if node == root:
+          break
+        if not node.tsNodeNextNamedSibling().tsNodeIsNull():
+          node = node.tsNodeNextNamedSibling()
+          break
+    else:
+      node = nextnode
+
+    if node == root:
+      break
+
+proc getCommented*(str: string): string =
+  "\n# " & str.strip().replace("\n", "\n# ")
+
+proc printTree*(nimState: NimState, pnode: PNode, offset = "") =
+  if nimState.gState.debug and pnode.kind != nkNone:
+    stdout.write "\n# " & offset & $pnode.kind & "("
+    case pnode.kind
+    of nkCharLit:
+      stdout.write "'" & pnode.intVal.char & "')"
+    of nkIntLit..nkUInt64Lit:
+      stdout.write $pnode.intVal & ")"
+    of nkFloatLit..nkFloat128Lit:
+      stdout.write $pnode.floatVal & ")"
+    of nkStrLit..nkTripleStrLit:
+      stdout.write "\"" & pnode.strVal & "\")"
+    of nkSym:
+      stdout.write $pnode.sym & ")"
+    of nkIdent:
+      stdout.write "\"" & $pnode.ident.s & "\")"
+    else:
+      if pnode.sons.len != 0:
+        for i in 0 ..< pnode.sons.len:
+          nimState.printTree(pnode.sons[i], offset & " ")
+          if i != pnode.sons.len - 1:
+            stdout.write ","
+        stdout.write "\n# " & offset & ")"
+      else:
+        stdout.write ")"
+    if offset.len == 0:
+      echo ""
+
+proc printDebug*(nimState: NimState, node: TSNode) =
+  if nimState.gState.debug:
+    echo nimState.getNodeVal(node).getCommented()
+    echo nimState.gState.printLisp(node).getCommented()
+
+proc printDebug*(nimState: NimState, pnode: PNode) =
+  if nimState.gState.debug:
+    echo ($pnode).getCommented()
+    nimState.printTree(pnode)
 
 # Compiler shortcuts
 
