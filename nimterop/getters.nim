@@ -237,8 +237,11 @@ proc getLit*(str: string): PNode =
 
 # TSNode shortcuts
 
+proc isNil*(node: TSNode): bool =
+  node.tsNodeIsNull()
+
 proc len*(node: TSNode): uint =
-  if not node.tsNodeIsNull:
+  if not node.isNil:
     result = node.tsNodeNamedChildCount().uint
 
 proc `[]`*(node: TSNode, i: BiggestUInt): TSNode =
@@ -246,50 +249,66 @@ proc `[]`*(node: TSNode, i: BiggestUInt): TSNode =
     result = node.tsNodeNamedChild(i.uint32)
 
 proc getName*(node: TSNode): string {.inline.} =
-  if not node.tsNodeIsNull:
+  if not node.isNil:
     return $node.tsNodeType()
 
+proc getNodeVal*(gState: State, node: TSNode): string =
+  if not node.isNil:
+    return gState.code[node.tsNodeStartByte() .. node.tsNodeEndByte()-1].strip()
+
 proc getNodeVal*(nimState: NimState, node: TSNode): string =
-  if not node.tsNodeIsNull:
-    return nimState.gState.code[node.tsNodeStartByte() .. node.tsNodeEndByte()-1].strip()
+  nimState.gState.getNodeVal(node)
 
 proc getAtom*(node: TSNode): TSNode =
-  if not node.tsNodeIsNull:
+  if not node.isNil:
     # Get child node which is topmost atom
     if node.getName() in gAtoms:
       return node
     elif node.len() != 0:
       return node[0].getAtom()
 
-proc getPtrCount*(node: TSNode): string =
-  if not node.tsNodeIsNull:
+proc getPtrCount*(node: TSNode): int =
+  if not node.isNil:
     # Get number of ptr nodes in tree
     var
       cnode = node
     while "pointer_declarator" in cnode.getName():
-      result &= "ptr "
+      result += 1
       if cnode.len() != 0:
         cnode = cnode[0]
       else:
         break
 
 proc getDeclarator*(node: TSNode): TSNode =
-  if not node.tsNodeIsNull:
+  if not node.isNil:
     # Return if child is a function or array declarator
     if node.getName() in ["function_declarator", "array_declarator"]:
       return node
     elif node.len() != 0:
       return node[0].getDeclarator()
 
-proc inTree*(node: TSNode, ntype: string): bool =
+proc firstChildInTree*(node: TSNode, ntype: string): TSNode =
   # Search for node type in tree - first children
-  result = false
   var
     cnode = node
-  while not cnode.tsNodeIsNull:
+  while not cnode.isNil:
     if cnode.getName() == ntype:
-      return true
+      return cnode
     cnode = cnode[0]
+
+proc anyChildInTree*(node: TSNode, ntype: string): TSNode =
+  # Search for node type anywhere in tree - depth first
+  var
+    cnode = node
+  while not cnode.isNil:
+    if cnode.getName() == ntype:
+      return cnode
+    for i in 0 ..< cnode.len:
+      let
+        ccnode = cnode[i].anyChildInTree(ntype)
+      if not ccnode.isNil():
+        return ccnode
+    cnode = cnode.tsNodeNextNamedSibling()
 
 proc inChildren*(node: TSNode, ntype: string): bool =
   # Search for node type in immediate children
@@ -320,11 +339,11 @@ proc getPxName*(node: TSNode, offset: int): string =
     np = node
     count = 0
 
-  while not np.tsNodeIsNull() and count < offset:
+  while not np.isNil() and count < offset:
     np = np.tsNodeParent()
     count += 1
 
-  if count == offset and not np.tsNodeIsNull():
+  if count == offset and not np.isNil():
     return np.getName()
 
 proc printLisp*(gState: State, root: TSNode): string =
@@ -334,12 +353,16 @@ proc printLisp*(gState: State, root: TSNode): string =
     depth = 0
 
   while true:
-    if not node.tsNodeIsNull() and depth > -1:
+    if not node.isNil() and depth > -1:
       if gState.pretty:
         result &= spaces(depth)
       let
         (line, col) = gState.getLineCol(node)
       result &= &"({$node.tsNodeType()} {line} {col} {node.tsNodeEndByte() - node.tsNodeStartByte()}"
+      let
+        val = gState.getNodeVal(node)
+      if "\n" notin val and " " notin val:
+        result &= &" \"{val}\""
     else:
       break
 
@@ -355,7 +378,7 @@ proc printLisp*(gState: State, root: TSNode): string =
         result &= ")"
       nextnode = node.tsNodeNextNamedSibling()
 
-    if nextnode.tsNodeIsNull():
+    if nextnode.isNil():
       while true:
         node = node.tsNodeParent()
         depth -= 1
@@ -367,7 +390,7 @@ proc printLisp*(gState: State, root: TSNode): string =
           result &= ")"
         if node == root:
           break
-        if not node.tsNodeNextNamedSibling().tsNodeIsNull():
+        if not node.tsNodeNextNamedSibling().isNil():
           node = node.tsNodeNextNamedSibling()
           break
     else:
@@ -409,12 +432,12 @@ proc printTree*(nimState: NimState, pnode: PNode, offset = "") =
 
 proc printDebug*(nimState: NimState, node: TSNode) =
   if nimState.gState.debug:
-    echo nimState.getNodeVal(node).getCommented()
+    echo ("Input => " & nimState.getNodeVal(node)).getCommented()
     echo nimState.gState.printLisp(node).getCommented()
 
 proc printDebug*(nimState: NimState, pnode: PNode) =
   if nimState.gState.debug:
-    echo ($pnode).getCommented()
+    echo ("Output => " & $pnode).getCommented()
     nimState.printTree(pnode)
 
 # Compiler shortcuts
@@ -445,6 +468,8 @@ proc getNameInfo*(nimState: NimState, node: TSNode, kind: NimSymKind, parent = "
   let
     name = nimState.getNodeVal(node)
   result.name = nimState.getIdentifier(name, kind, parent)
+  if kind == nskType:
+    result.name = result.name.getType()
   result.info = nimState.getLineInfo(node)
 
 proc getCurrentHeader*(fullpath: string): string =
