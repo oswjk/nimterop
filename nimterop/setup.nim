@@ -6,7 +6,7 @@ proc treesitterSetup*() =
   gitPull("https://github.com/tree-sitter/tree-sitter", cacheDir / "treesitter", """
 lib/include/*
 lib/src/*
-""", "0.15.5")
+""", "0.16.2")
 
   gitPull("https://github.com/JuliaStrings/utf8proc", cacheDir / "utf8proc", """
 *.c
@@ -36,7 +36,7 @@ src/*.h
 src/*.c
 src/*.cc
 src/tree_sitter/parser.h
-""", "v0.15.0")
+""", "v0.16.0")
 
   writeFile(cacheDir / "treesitter_c" / "src" / "api.h", """
 const TSLanguage *tree_sitter_c();
@@ -48,7 +48,7 @@ src/*.h
 src/*.c
 src/*.cc
 src/tree_sitter/parser.h
-""", "v0.15.0")
+""", "v0.16.0")
 
   writeFile(cacheDir / "treesitter_cpp" / "src" / "api.h", """
 const TSLanguage *tree_sitter_cpp();
