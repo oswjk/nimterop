@@ -106,6 +106,7 @@ proc newArrayTree(nimState: NimState, node: TSNode, typ, size: PNode): PNode =
 proc addTypeObject(nimState: NimState, node: TSNode) =
   # Add a type of object
   let
+    # TODO - check blank and override
     typeDef = nimState.newTypeIdent(node)
 
   # type X* = object
@@ -141,11 +142,11 @@ proc addTypeTyped(nimState: NimState, node: TSNode) =
   # Add a type of a specific type
   let
     # node[1] = identifer = name
+    # TODO - check blank and override
     typeDef = nimState.newTypeIdent(node[1])
 
     # node[0] = identifier = type name
     (name, info) = nimState.getNameInfo(node[0].getAtom(), nskType)
-    # TODO - check blank and override
     ident = nimState.getIdent(name, info, exported = false)
 
     # node[1] could have nested pointers
@@ -178,14 +179,14 @@ proc addTypeTyped(nimState: NimState, node: TSNode) =
     nimState.printDebug(typeDef)
 
 proc addTypeArray(nimState: NimState, node: TSNode) =
-  # Add a type of a array type
+  # Add a type of array type
   let
     # node[1] = identifer = name
+    # TODO - check blank and override
     typeDef = nimState.newTypeIdent(node[1])
 
     # node[0] = identifier = type name
     (name, info) = nimState.getNameInfo(node[0].getAtom(), nskType)
-    # TODO - check blank and override
     ident = nimState.getIdent(name, info, exported = false)
 
     # Top-most array declarator
@@ -225,6 +226,27 @@ proc addTypeArray(nimState: NimState, node: TSNode) =
   nimState.typeSection.add typeDef
 
   nimState.printDebug(typeDef)
+
+proc addTypeFunc(nimState: NimState, node: TSNode) =
+  # Add a type of function type
+  let
+    # node[1] = identifier = name
+    # TODO - check blank and override
+    typeDef = nimState.newTypeIdent(node[1])
+
+    # node[0] = identifier = return type name
+    (rname, rinfo) = nimState.getNameInfo(node[0].getAtom(), nskType)
+
+    # node[1] could have nested pointers
+    count = node[1].getArrayCount()
+
+    # Parameter list
+    plist = node[1].anyChildInTree("parameter_list")
+
+  var
+    retType = nimState.getIdent(rname, rinfo)
+  if count > 0:
+    retType = newPtrTree(count, retType)
 
 proc addType(nimState: NimState, node: TSNode) =
   nimState.printDebug(node)
@@ -279,69 +301,72 @@ proc addType(nimState: NimState, node: TSNode) =
           adecl = node[1].anyChildInTree("array_declarator")
         if fdlist.isNil():
           if adecl.isNil and fdecl.isNil:
-            if not sspec.isNil:
-              # typedef struct X Y;
-              # typedef struct X *Y;
-              #
-              # (type_definition
-              #  (struct_specifier
-              #   (type_identifier)
-              #  )
-              #  (pointer_declarator - optional, nested
-              #   (type_identifier)
-              #  )
-              # )
-              nimState.addTypeTyped(node)
-            else:
-              # typedef X Y;
-              # typedef X *Y;
-              #
-              # (type_definition
-              #  (type_identifier|primitive_type)
-              #  (pointer_declarator - optional, nested
-              #   (type_identifier)
-              #  )
-              # )
-              nimState.addTypeTyped(node)
+            # typedef X Y;
+            # typedef X *Y;
+            # typedef struct X Y;
+            # typedef struct X *Y;
+            #
+            # (type_definition
+            #  (type_identifier|primitive_type|)
+            #  (struct_specifier
+            #   (type_identifier)
+            #  )
+            #
+            #  (pointer_declarator - optional, nested
+            #   (type_identifier)
+            #  )
+            # )
+            nimState.addTypeTyped(node)
           elif not fdecl.isNil:
-            discard
+            # typedef X (*Y)(a1, a2, a3);
+            # typedef X *(*Y)(a1, a2, a3);
+            # typedef struct X (*Y)(a1, a2, a3);
+            # typedef struct X *(*Y)(a1, a2, a3);
+            #
+            # (type_definition
+            #  (type_identifier|primitive_type|)
+            #  (struct_specifier
+            #   (type_identifier)
+            #  )
+            #
+            #  (pointer_declarator - optional, nested
+            #   (function_declarator
+            #    (parenthesized_declarator
+            #     (pointer_declarator
+            #      (type_identifer)
+            #     )
+            #    )
+            #    (parameter_list
+            #     (parameter_declaration
+            #      (struct_specifier|type_identifier|primitive_type|array_declarator|function_declarator)
+            #      (identifier - optional)
+            #     )
+            #    )
+            #   )
+            #  )
+            # )
+            nimState.addTypeFunc(node)
           elif not adecl.isNil:
-            if not sspec.isNil:
-              # typedef struct X Y[a][..];
-              # typedef struct X *Y[a][..];
-              # typedef struct X *(*Y)[a][..];
-              #
-              # (type_definition
-              #  (struct_specifier
-              #   (type_identifier)
-              #  )
-              #  (pointer_declarator - optional, nested
-              #   (array_declarator - nested
-              #    (pointer_declarator - optional, nested
-              #     (type_identifier)
-              #    )
-              #    (number_literal)
-              #   )
-              #  )
-              # )
-              nimState.addTypeArray(node)
-            else:
-              # typedef X Y[a][..];
-              # typedef X *Y[a][..];
-              # typedef X *(*Y)[a][..];
-              #
-              # (type_definition
-              #  (type_identifier|primitive_type)
-              #  (pointer_declarator - optional, nested
-              #   (array_declarator - nested
-              #    (pointer_declarator - optional, nested
-              #     (type_identifier)
-              #    )
-              #    (number_literal)
-              #   )
-              #  )
-              # )
-              nimState.addTypeArray(node)
+            # typedef struct X Y[a][..];
+            # typedef struct X *Y[a][..];
+            # typedef struct X *(*Y)[a][..];
+            #
+            # (type_definition
+            #  (type_identifier|primitive_type|)
+            #  (struct_specifier
+            #   (type_identifier)
+            #  )
+            #
+            #  (pointer_declarator - optional, nested
+            #   (array_declarator - nested
+            #    (pointer_declarator - optional, nested
+            #     (type_identifier)
+            #    )
+            #    (number_literal)
+            #   )
+            #  )
+            # )
+            nimState.addTypeArray(node)
 
 proc addEnum(nimState: NimState, node: TSNode) =
   nimState.printDebug(node)
