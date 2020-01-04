@@ -97,14 +97,10 @@ proc getType*(str: string): string =
 
 proc getPtrType*(str: string): string =
   result = case str:
-    of "ptr cchar":
+    of "cchar":
       "cstring"
-    of "ptr ptr cchar":
-      "ptr cstring"
-    of "ptr object":
+    of "object":
       "pointer"
-    of "ptr ptr object":
-      "ptr pointer"
     else:
       str
 
@@ -267,17 +263,23 @@ proc getAtom*(node: TSNode): TSNode =
     elif node.len() != 0:
       return node[0].getAtom()
 
-proc getPtrCount*(node: TSNode): int =
+proc getXCount*(node: TSNode, ntype: string): int =
   if not node.isNil:
-    # Get number of ptr nodes in tree
+    # Get number of ntype nodes nested in tree
     var
       cnode = node
-    while "pointer_declarator" in cnode.getName():
+    while ntype in cnode.getName():
       result += 1
       if cnode.len() != 0:
         cnode = cnode[0]
       else:
         break
+
+proc getPtrCount*(node: TSNode): int =
+  node.getXCount("pointer_declarator")
+
+proc getArrayCount*(node: TSNode): int =
+  node.getXCount("array_declarator")
 
 proc getDeclarator*(node: TSNode): TSNode =
   if not node.isNil:
@@ -309,6 +311,15 @@ proc anyChildInTree*(node: TSNode, ntype: string): TSNode =
       if not ccnode.isNil():
         return ccnode
     cnode = cnode.tsNodeNextNamedSibling()
+
+proc mostNestedChildInTree*(node: TSNode): TSNode =
+  # Search for the most nested child of node's type in tree
+  var
+    cnode = node
+    ntype = cnode.getName()
+  while not cnode.isNil and cnode.len != 0 and cnode[0].getName() == ntype:
+    cnode = cnode[0]
+  result = cnode
 
 proc inChildren*(node: TSNode, ntype: string): bool =
   # Search for node type in immediate children
