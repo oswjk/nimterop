@@ -263,22 +263,25 @@ proc getAtom*(node: TSNode): TSNode =
     elif node.len() != 0:
       return node[0].getAtom()
 
-proc getXCount*(node: TSNode, ntype: string): int =
+proc getXCount*(node: TSNode, ntype: string, reverse = false): int =
   if not node.isNil:
     # Get number of ntype nodes nested in tree
     var
       cnode = node
     while ntype in cnode.getName():
       result += 1
-      if cnode.len() != 0:
-        cnode = cnode[0]
+      if reverse:
+        cnode = cnode.tsNodeParent()
       else:
-        break
+        if cnode.len() != 0:
+          cnode = cnode[0]
+        else:
+          break
 
-proc getPtrCount*(node: TSNode): int =
+proc getPtrCount*(node: TSNode, reverse = false): int =
   node.getXCount("pointer_declarator")
 
-proc getArrayCount*(node: TSNode): int =
+proc getArrayCount*(node: TSNode, reverse = false): int =
   node.getXCount("array_declarator")
 
 proc getDeclarator*(node: TSNode): TSNode =
