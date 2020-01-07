@@ -13,3 +13,8 @@ switch("stackTrace", "on")
 
 # Path to compiler
 switch("path", "$nim")
+
+# Case objects
+when not defined(danger):
+  switch("define", "nimOldCaseObjects")
+
