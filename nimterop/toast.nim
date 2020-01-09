@@ -2,7 +2,7 @@ import os, osproc, strformat, strutils, times
 
 import "."/treesitter/[api, c, cpp]
 
-import "."/[ast2, compat, globals, getters]
+import "."/[ast2, globals, getters]
 
 proc process(gState: State, path: string) =
   doAssert existsFile(path), &"Invalid path {path}"

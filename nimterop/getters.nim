@@ -4,7 +4,7 @@ import regex
 
 import compiler/[ast, idents, lineinfos, msgs, pathutils, renderer]
 
-import "."/[build, compat, globals, plugin, treesitter/api]
+import "."/[build, globals, plugin, treesitter/api]
 
 const gReserved = """
 addr and as asm
@@ -236,11 +236,11 @@ proc getLit*(str: string): PNode =
 proc isNil*(node: TSNode): bool =
   node.tsNodeIsNull()
 
-proc len*(node: TSNode): uint =
+proc len*(node: TSNode): int =
   if not node.isNil:
-    result = node.tsNodeNamedChildCount().uint
+    result = node.tsNodeNamedChildCount().int
 
-proc `[]`*(node: TSNode, i: BiggestUInt): TSNode =
+proc `[]`*(node: TSNode, i: SomeInteger): TSNode =
   if i < node.len():
     result = node.tsNodeNamedChild(i.uint32)
 
@@ -652,6 +652,6 @@ proc loadPlugin*(gState: State, sourcePath: string) =
 
 proc expandSymlinkAbs*(path: string): string =
   try:
-    result = path.expandSymlink().absolutePath(path.parentDir()).myNormalizedPath()
+    result = path.expandSymlink().absolutePath(path.parentDir()).normalizedPath()
   except:
     result = path
