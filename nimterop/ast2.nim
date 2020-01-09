@@ -4,7 +4,7 @@ import compiler/[ast, astalgo, idents, options, renderer]
 
 import "."/treesitter/api
 
-import "."/[compat, globals, getters]
+import "."/[globals, getters]
 
 proc addConst(nimState: NimState, node: TSNode) =
   # #define X Y
@@ -137,7 +137,7 @@ proc newArrayTree(nimState: NimState, node: TSNode, typ, size: PNode): PNode =
 proc getTypeArray(nimState: NimState, node: TSNode): PNode
 proc getTypeProc(nimState: NimState, name: string, node: TSNode): PNode
 
-proc newIdentDefs(nimState: NimState, name: string, node: TSNode, offset: uint64, exported = false): PNode =
+proc newIdentDefs(nimState: NimState, name: string, node: TSNode, offset: SomeInteger, exported = false): PNode =
   # Create nkIdentDefs tree for specified proc parameter or object field
   #
   # For proc, param should not be exported
