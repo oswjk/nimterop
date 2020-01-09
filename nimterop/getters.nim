@@ -313,7 +313,10 @@ proc anyChildInTree*(node: TSNode, ntype: string): TSNode =
         ccnode = cnode[i].anyChildInTree(ntype)
       if not ccnode.isNil():
         return ccnode
-    cnode = cnode.tsNodeNextNamedSibling()
+    if cnode != node:
+      cnode = cnode.tsNodeNextNamedSibling()
+    else:
+      break
 
 proc mostNestedChildInTree*(node: TSNode): TSNode =
   # Search for the most nested child of node's type in tree
@@ -443,6 +446,10 @@ proc printTree*(nimState: NimState, pnode: PNode, offset = "") =
         stdout.write ")"
     if offset.len == 0:
       echo ""
+
+template decho*(str: untyped): untyped =
+  if nimState.gState.debug:
+    echo str.getCommented()
 
 proc printDebug*(nimState: NimState, node: TSNode) =
   if nimState.gState.debug:
