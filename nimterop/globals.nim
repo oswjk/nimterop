@@ -1,10 +1,11 @@
 import sequtils, sets, tables
 
-import compiler/[ast, idents, options]
+import regex
 
 import "."/plugin
 
 when not declared(CIMPORT):
+  import compiler/[ast, idents, options]
   import "."/treesitter/api
 
 const
@@ -50,9 +51,10 @@ type
     commentStr*, debugStr*, skipStr*: string
 
     # Nim compiler objects
-    constSection*, enumSection*, procSection*, typeSection*: PNode
-    identCache*: IdentCache
-    config*: ConfigRef
+    when not declared(CIMPORT):
+      constSection*, enumSection*, procSection*, typeSection*: PNode
+      identCache*: IdentCache
+      config*: ConfigRef
 
     gState*: State
 
