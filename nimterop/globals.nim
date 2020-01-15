@@ -99,5 +99,4 @@ when not declared(CIMPORT):
 
   template decho*(str: untyped): untyped =
     if nimState.gState.debug:
-      let gState = nimState.gState
       necho str.getCommented()

@@ -449,8 +449,8 @@ proc printTree*(nimState: NimState, pnode: PNode, offset = "") =
 
 proc printDebug*(nimState: NimState, node: TSNode) =
   if nimState.gState.debug:
-    necho ("Input => " & nimState.getNodeVal(node)).getCommented()
-    necho nimState.gState.printLisp(node).getCommented()
+    necho ("Input => " & nimState.getNodeVal(node)).getCommented() & "\n" &
+          nimState.gState.printLisp(node).getCommented()
 
 proc printDebug*(nimState: NimState, pnode: PNode) =
   if nimState.gState.debug:
