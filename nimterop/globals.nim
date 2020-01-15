@@ -96,3 +96,7 @@ when not declared(CIMPORT):
   template necho*(args: string) {.dirty.} =
     let gState = nimState.gState
     gecho args
+
+  template decho*(str: untyped): untyped =
+    if nimState.gState.debug:
+      necho str.getCommented()

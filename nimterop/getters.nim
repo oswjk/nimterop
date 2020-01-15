@@ -453,8 +453,8 @@ template decho*(str: untyped): untyped =
 
 proc printDebug*(nimState: NimState, node: TSNode) =
   if nimState.gState.debug:
-    echo ("Input => " & nimState.getNodeVal(node)).getCommented()
-    echo nimState.gState.printLisp(node).getCommented()
+    necho ("Input => " & nimState.getNodeVal(node)).getCommented() & "\n" &
+          nimState.gState.printLisp(node).getCommented()
 
 proc printDebug*(nimState: NimState, pnode: PNode) =
   if nimState.gState.debug:
