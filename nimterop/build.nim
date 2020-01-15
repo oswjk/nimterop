@@ -460,7 +460,7 @@ proc configure*(path, check: string, flags = "") =
         echo "#   Running autogen.sh"
 
         echo execAction(
-          &"cd {(path / i).parentDir().sanitizePath} && bash autogen.sh").output
+          &"cd {(path / i).parentDir().sanitizePath} && bash ./autogen.sh").output
 
         break
 
@@ -477,7 +477,7 @@ proc configure*(path, check: string, flags = "") =
     echo "#   Running configure " & flags
 
     var
-      cmd = &"cd {path.sanitizePath} && bash configure"
+      cmd = &"cd {path.sanitizePath} && bash ./configure"
     if flags.len != 0:
       cmd &= &" {flags}"
 

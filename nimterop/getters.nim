@@ -445,20 +445,16 @@ proc printTree*(nimState: NimState, pnode: PNode, offset = "") =
       else:
         stdout.write ")"
     if offset.len == 0:
-      echo ""
-
-template decho*(str: untyped): untyped =
-  if nimState.gState.debug:
-    echo str.getCommented()
+      necho ""
 
 proc printDebug*(nimState: NimState, node: TSNode) =
   if nimState.gState.debug:
-    echo ("Input => " & nimState.getNodeVal(node)).getCommented()
-    echo nimState.gState.printLisp(node).getCommented()
+    necho ("Input => " & nimState.getNodeVal(node)).getCommented()
+    necho nimState.gState.printLisp(node).getCommented()
 
 proc printDebug*(nimState: NimState, pnode: PNode) =
   if nimState.gState.debug:
-    echo ("Output => " & $pnode).getCommented()
+    necho ("Output => " & $pnode).getCommented()
     nimState.printTree(pnode)
 
 # Compiler shortcuts

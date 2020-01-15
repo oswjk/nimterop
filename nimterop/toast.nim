@@ -42,11 +42,11 @@ proc process(gState: State, path: string) =
     tree.tsTreeDelete()
 
   if gState.past:
-    echo gState.printLisp(root)
+    gecho gState.printLisp(root)
   elif gState.pnim:
     gState.printNim(path, root)
   elif gState.preprocess:
-    echo gState.code
+    gecho gState.code
 
 # CLI processing with default values
 proc main(
@@ -99,43 +99,34 @@ proc main(
   if pluginSourcePath.nBl:
     gState.loadPlugin(pluginSourcePath)
 
-  # Backup stdout
   var
     outputFile = output
-    outputHandle: File
-    stdoutBackup = stdout
     check = check or stub
 
-  # Fix output file extention
-  if outputFile.len != 0:
+  # Fix output file extention for Nim mode
+  if outputFile.len != 0 and pnim:
     if outputFile.splitFile().ext != ".nim":
       outputFile = outputFile & ".nim"
 
   # Check needs a file
   if check and outputFile.len == 0:
     outputFile = getTempDir() / "toast_" & ($getTime().toUnix()).addFileExt("nim")
-    when defined(windows):
-      # https://github.com/nim-lang/Nim/issues/12939
-      echo &"Cannot print wrapper with check on Windows, review {outputFile}\n"
 
   # Redirect output to file
   if outputFile.len != 0:
-    when defined(windows):
-      doAssert stdout.reopen(outputFile, fmWrite), &"Failed to write to {outputFile}"
-    else:
-      doAssert outputHandle.open(outputFile, fmWrite), &"Failed to write to {outputFile}"
-      stdout = outputHandle
+    doAssert gState.outputHandle.open(outputFile, fmWrite),
+      &"Failed to write to {outputFile}"
 
   if source.nBl:
     # Print source after preprocess or Nim output
     if gState.pnim:
-      printNimHeader()
+      gState.printNimHeader()
     for src in source:
       gState.process(src.expandSymlinkAbs())
 
-  when not defined(windows):
-    # Restore stdout
-    stdout = stdoutBackup
+  # Close outputFile
+  if outputFile.len != 0:
+    gState.outputHandle.close()
 
   # Check Nim output
   if gState.pnim and check:
@@ -145,12 +136,6 @@ proc main(
     if err != 0:
       # Failed check so try stubbing
       if stub:
-        # Close output file to prepend stubs
-        when not defined(windows):
-          outputHandle.close()
-        else:
-          stdout.close()
-
         # Find undeclared identifiers in error
         var
           data = ""
@@ -177,14 +162,13 @@ proc main(
 
         # Rerun nim check on stubbed wrapper
         (check, err) = execCmdEx(&"{gState.nim} check {outputFile}")
-        doAssert err == 0, "# Nim check with stub failed:\n\n" & check
+        doAssert err == 0, data & "\n# Nim check with stub failed:\n\n" & check
       else:
-        doAssert err == 0, "# Nim check failed:\n\n" & check
+        doAssert err == 0, outputFile.readFile() & "\n# Nim check failed:\n\n" & check
 
-  when not defined(windows):
-    # Print wrapper if temporarily redirected to file
-    if check and output.len == 0:
-      stdout.write outputFile.readFile()
+  # Print wrapper if temporarily redirected to file
+  if check and output.len == 0:
+    stdout.write outputFile.readFile()
 
 when isMainModule:
   # Setup cligen command line help and short flags
