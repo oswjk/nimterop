@@ -42,7 +42,7 @@ proc process(gState: State, path: string) =
     tree.tsTreeDelete()
 
   if gState.past:
-    echo gState.printLisp(root)
+    gecho gState.printLisp(root)
   elif gState.pnim:
     gState.printNim(path, root)
   elif gState.preprocess:

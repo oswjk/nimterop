@@ -1,6 +1,6 @@
 import macros, os, strutils, tables, times
 
-import compiler/[ast, astalgo, idents, options, renderer]
+import compiler/[ast, idents, options, renderer]
 
 import "."/treesitter/api
 
@@ -806,8 +806,8 @@ proc searchTree(nimState: NimState, root: TSNode) =
     if node == root:
       break
 
-proc printNimHeader*() =
-  echo """# Generated at $1
+proc printNimHeader*(gState: State) =
+  gecho """# Generated at $1
 # Command line:
 #   $2 $3
 
@@ -845,4 +845,4 @@ proc printNim*(gState: State, fullpath: string, root: TSNode) =
   tree.add nimState.typeSection
   tree.add nimState.procSection
 
-  echo tree.renderTree()
+  gecho tree.renderTree()
