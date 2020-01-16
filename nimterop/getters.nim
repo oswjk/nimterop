@@ -30,6 +30,8 @@ yield""".split(Whitespace).toHashSet()
 
 # Types related
 
+# Types related
+
 const gTypeMap* = {
   # char
   "char": "cchar",

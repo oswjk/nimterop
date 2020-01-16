@@ -162,9 +162,9 @@ proc main(
 
         # Rerun nim check on stubbed wrapper
         (check, err) = execCmdEx(&"{gState.nim} check {outputFile}")
-        doAssert err == 0, data & "# Nim check with stub failed:\n\n" & check
+        doAssert err == 0, data & "\n# Nim check with stub failed:\n\n" & check
       else:
-        doAssert err == 0, outputFile.readFile() & "# Nim check failed:\n\n" & check
+        doAssert err == 0, outputFile.readFile() & "\n# Nim check failed:\n\n" & check
 
   # Print wrapper if temporarily redirected to file
   if check and output.len == 0:
