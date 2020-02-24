@@ -1,4 +1,4 @@
-import macros, os, strutils, tables, times
+import macros, os, sets, strutils, tables, times
 
 import compiler/[ast, idents, options, renderer]
 
@@ -165,11 +165,13 @@ proc newIdentDefs(nimState: NimState, name: string, node: TSNode, offset: SomeIn
   result = newNode(nkIdentDefs)
 
   let
-    # node[0] - param type
-    (tname, tinfo) = nimState.getNameInfo(node[0], nskType)
+    start = getStartAtom(node)
+
+    # node[start] - param type
+    (tname, tinfo) = nimState.getNameInfo(node[start], nskType)
     tident = nimState.getIdent(tname, tinfo, exported = false)
 
-  if node.len == 1:
+  if start == node.len - 1:
     # Only for proc with no named param - create a param name based on offset
     #
     # int func(char, int);
@@ -181,9 +183,9 @@ proc newIdentDefs(nimState: NimState, name: string, node: TSNode, offset: SomeIn
     result.add newNode(nkEmpty)
   else:
     let
-      fdecl = node[1].anyChildInTree("function_declarator")
-      adecl = node[1].anyChildInTree("array_declarator")
-      abst = node[1].getName() == "abstract_pointer_declarator"
+      fdecl = node[start+1].anyChildInTree("function_declarator")
+      adecl = node[start+1].anyChildInTree("array_declarator")
+      abst = node[start+1].getName() == "abstract_pointer_declarator"
     if fdecl.isNil and adecl.isNil:
       if abst:
         # Only for proc with no named param with pointer type
@@ -193,17 +195,17 @@ proc newIdentDefs(nimState: NimState, name: string, node: TSNode, offset: SomeIn
         let
           pname = "a" & $(offset+1)
           pident = nimState.getIdent(pname, tinfo, exported)
-          acount = node[1].getXCount("abstract_pointer_declarator")
+          acount = node[start+1].getXCount("abstract_pointer_declarator")
         result.add pident
         result.add nimState.newPtrTree(acount, tident)
         result.add newNode(nkEmpty)
       else:
         # Named param, simple type
         let
-          (pname, pinfo) = nimState.getNameInfo(node[1].getAtom(), nskField, parent = name)
+          (pname, pinfo) = nimState.getNameInfo(node[start+1].getAtom(), nskField, parent = name)
           pident = nimState.getIdent(pname, pinfo, exported)
 
-          count = node[1].getPtrCount()
+          count = node[start+1].getPtrCount()
         result.add pident
         if count > 0:
           result.add nimState.newPtrTree(count, tident)
@@ -213,7 +215,7 @@ proc newIdentDefs(nimState: NimState, name: string, node: TSNode, offset: SomeIn
     elif not fdecl.isNil:
       # Named param, function pointer
       let
-        (pname, pinfo) = nimState.getNameInfo(node[1].getAtom(), nskField, parent = name)
+        (pname, pinfo) = nimState.getNameInfo(node[start+1].getAtom(), nskField, parent = name)
         pident = nimState.getIdent(pname, pinfo, exported)
       result.add pident
       result.add nimState.getTypeProc(name, node)
@@ -221,7 +223,7 @@ proc newIdentDefs(nimState: NimState, name: string, node: TSNode, offset: SomeIn
     elif not adecl.isNil:
       # Named param, array type
       let
-        (pname, pinfo) = nimState.getNameInfo(node[1].getAtom(), nskField, parent = name)
+        (pname, pinfo) = nimState.getNameInfo(node[start+1].getAtom(), nskField, parent = name)
         pident = nimState.getIdent(pname, pinfo, exported)
       result.add pident
       result.add nimState.getTypeArray(node)
@@ -332,15 +334,17 @@ proc addTypeTyped(nimState: NimState, node: TSNode, toverride = "", duplicate = 
   # If `toverride` is set, use it as the type name
   # If `duplicate` is set, don't add the same name
   decho("addTypeTyped()")
-  for i in 1 ..< node.len:
+  let
+    start = getStartAtom(node)
+  for i in start+1 ..< node.len:
     # Add a type of a specific type
     let
       # node[i] = identifer = name
       # TODO - check blank and override
       typeDef = nimState.newTypeIdent(node[i])
 
-      # node[0] = identifier = type name
-      (tname0, tinfo) = nimState.getNameInfo(node[0].getAtom(), nskType)
+      # node[start] = identifier = type name
+      (tname0, tinfo) = nimState.getNameInfo(node[start].getAtom(), nskType)
 
       # Override type name
       tname = if toverride.len != 0: toverride else: tname0
@@ -381,19 +385,21 @@ proc addTypeTyped(nimState: NimState, node: TSNode, toverride = "", duplicate = 
 proc getTypeArray(nimState: NimState, node: TSNode): PNode =
   # Create array type tree
   let
-    # node[0] = identifier = type name
-    (name, info) = nimState.getNameInfo(node[0].getAtom(), nskType)
+    start = getStartAtom(node)
+
+    # node[start] = identifier = type name
+    (name, info) = nimState.getNameInfo(node[start].getAtom(), nskType)
     ident = nimState.getIdent(name, info, exported = false)
 
     # Top-most array declarator
-    adecl = node[1].firstChildInTree("array_declarator")
+    adecl = node[start+1].firstChildInTree("array_declarator")
 
-    # node[1] could have nested arrays
+    # node[start+1] could have nested arrays
     acount = adecl.getArrayCount()
     innermost = adecl.mostNestedChildInTree()
 
-    # node[1] could have nested pointers - type
-    tcount = node[1].getPtrCount()
+    # node[start+1] could have nested pointers - type
+    tcount = node[start+1].getPtrCount()
 
     # Name could be nested pointer to array
     #
@@ -621,6 +627,7 @@ proc addType(nimState: NimState, node: TSNode) =
             # typedef struct X *Y;
             #
             # (type_definition
+            #  (type_qualifier?)
             #  (type_identifier|primitive_type|)
             #  (struct_specifier
             #   (type_identifier)
@@ -639,6 +646,7 @@ proc addType(nimState: NimState, node: TSNode) =
             # typedef struct X *(*Y)(a1, a2, a3);
             #
             # (type_definition
+            #  (type_qualifier?)
             #  (type_identifier|primitive_type|)
             #  (struct_specifier
             #   (type_identifier)
@@ -668,6 +676,7 @@ proc addType(nimState: NimState, node: TSNode) =
             # typedef struct X *(*Y)[a][..];
             #
             # (type_definition
+            #  (type_qualifier?)
             #  (type_identifier|primitive_type|)
             #  (struct_specifier
             #   (type_identifier)
@@ -819,7 +828,7 @@ import nimterop/types
 proc printNim*(gState: State, fullpath: string, root: TSNode) =
   var
     nimState = new(NimState)
-    fp = fullpath.replace("\\", "/")
+    #fp = fullpath.replace("\\", "/")
 
   nimState.identifiers = newTable[string, string]()
 

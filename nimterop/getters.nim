@@ -265,6 +265,15 @@ proc getAtom*(node: TSNode): TSNode =
     elif node.len() != 0:
       return node[0].getAtom()
 
+proc getStartAtom*(node: TSNode): int =
+  if not node.isNil:
+    # Skip const, volatile and other type qualifiers
+    for i in 0 .. node.len - 1:
+      if node[i].getAtom().getName() notin gAtoms:
+        result += 1
+      else:
+        break
+
 proc getXCount*(node: TSNode, ntype: string, reverse = false): int =
   if not node.isNil:
     # Get number of ntype nodes nested in tree
