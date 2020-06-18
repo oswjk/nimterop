@@ -21,6 +21,9 @@ var
   lexp = "liblzma version = "
   zexp = "zlib version = "
 
+when (NimMajor, NimMinor, NimPatch) >= (1, 2, 0):
+  cmd &= " --gc:arc"
+
 testCall(cmd & lrcmd, "No build files found", 1)
 testCall(cmd & " -d:libssh2Conan" & sshcmd, "Need version for Conan.io uri", 1)
 testCall(cmd & " -d:libssh2JBB -d:libssh2SetVer=1.9.0" & sshcmd, "Version in both uri", 1)
