@@ -22,8 +22,8 @@ var
   zexp = "zlib version = "
 
 testCall(cmd & lrcmd, "No build files found", 1)
-testCall(cmd & " -d:libssh2Conan" & sshcmd, "Need version for Conan uri", 1)
-testCall(cmd & " -d:libssh2JBB" & sshcmd, "Need version for BinaryBuilder.org uri", 1)
+testCall(cmd & " -d:libssh2Conan" & sshcmd, "Need version for Conan.io uri", 1)
+testCall(cmd & " -d:libssh2JBB -d:libssh2SetVer=1.9.0" & sshcmd, "Version in both uri", 1)
 
 when defined(posix):
   # stdlib
@@ -45,9 +45,10 @@ else:
   testCall(cmd & " -d:zlibConan -d:zlibSetVer=1.2.11 -d:zlibStatic" & zrcmd, zexp, 0)
 
 # JBB
-testCall(cmd & " -d:libssh2JBB -d:libssh2SetVer=1.9.0" & sshcmd, zexp, 0)
+testCall(cmd & " -d:libssh2JBB" & sshcmd, zexp, 0)
 testCall(cmd & " -d:zlibJBB -d:zlibSetVer=1.2.11" & zrcmd, zexp, 0)
-testCall(cmd & " -d:zlibJBB -d:zlibSetVer=1.2.11 -d:zlibStatic" & zrcmd, zexp, 0)
+testCall(cmd & " -d:zlibJBB -d:zlibSetVer=1.2.11 -d:zlibStatic" & zrcmd, zexp, 0, delete = false)
+testCall(cmd & " -d:lzmaJBB -d:lzmaSetVer=5.2.4" & lrcmd, lexp & "5.2.4", 0)
 
 # git
 testCall(cmd & " -d:envTest" & zrcmd, zexp, 0)
@@ -68,3 +69,4 @@ testCall(cmd & " -d:zlibDL -d:zlibStatic -d:zlibSetVer=1.2.11" & zrcmd, zexp & "
 
 # conan
 testCall(cmd & " -d:libssh2Conan -d:libssh2SetVer=1.9.0" & sshcmd, zexp, 0)
+testCall(cmd & " -d:lzmaConan -d:lzmaSetVer=5.2.4" & lrcmd, lexp & "5.2.4", 0)
